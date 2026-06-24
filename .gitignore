@@ -45,3 +45,11 @@ deployHook
 
 # allow hook directory
 !**/hook/
+
+#Security docs
+domain-a-explained
+domain-b-explained
+.claude
+security-audit-code-remediation.md
+security-audit-report.md
+KubeArmor/pocaudit
