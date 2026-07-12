@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Design Proposal: Where Should the Management gRPC Server Live?</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+
+  :root{
+    --navy:#0b2545;
+    --navy-2:#123b6d;
+    --teal:#0d9488;
+    --teal-light:#e6fbf8;
+    --purple:#7c3aed;
+    --purple-light:#f2eaff;
+    --amber:#d97706;
+    --amber-light:#fef3e2;
+    --rose:#e11d48;
+    --rose-light:#fde8ee;
+    --green:#16a34a;
+    --green-light:#eafbf0;
+    --cyan:#0891b2;
+    --cyan-light:#e5fafd;
+    --ink:#1a2233;
+    --muted:#57667a;
+    --border:#e1e7ef;
+    --code-bg:#f1f4f9;
+    --code-ink:#b3261e;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin:0; padding:0;
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    font-size: 10.6pt;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+  h1, h2, h3, h4 { font-family: "Segoe UI Semibold", "Segoe UI", Arial, sans-serif; color: var(--navy); line-height:1.25; }
+
+  .cover {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--teal) 55%, var(--purple) 100%);
+    color: #ffffff;
+    border-radius: 14px;
+    padding: 46px 42px;
+    margin-bottom: 26px;
+    page-break-after: always;
+  }
+  .cover .kicker {
+    display:inline-block;
+    background: rgba(255,255,255,0.16);
+    border: 1px solid rgba(255,255,255,0.35);
+    color:#fff;
+    font-size: 9.5pt;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 5px 14px;
+    border-radius: 999px;
+    margin-bottom: 22px;
+  }
+  .cover h1 { color:#ffffff; font-size: 25pt; margin: 0 0 14px 0; max-width: 640px; }
+  .cover p.subtitle { color: #eafaf6; font-size: 12pt; max-width: 620px; margin: 0 0 30px 0; }
+  .cover-badges { display:flex; flex-wrap:wrap; gap:10px; margin-top: 26px; }
+  .cover-badge {
+    background: rgba(255,255,255,0.10);
+    border: 1px solid rgba(255,255,255,0.28);
+    border-radius: 10px;
+    padding: 10px 14px;
+    min-width: 190px;
+  }
+  .cover-badge .k { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.05em; color:#cdeee7; display:block; margin-bottom:3px;}
+  .cover-badge .v { font-size: 10pt; color:#fff; font-weight:600; }
+  .cover-planes { display:flex; gap:14px; margin-top: 34px; }
+  .plane-chip { flex:1; border-radius: 12px; padding: 16px 16px; color:#fff; }
+  .plane-chip.feeder { background: rgba(13,148,136,0.35); border:1px solid rgba(255,255,255,0.35);}
+  .plane-chip.mgmt { background: rgba(124,58,237,0.35); border:1px solid rgba(255,255,255,0.35);}
+  .plane-chip .t { font-weight:700; font-size:11pt; margin-bottom:4px; }
+  .plane-chip .d { font-size:9.3pt; color:#f1f7ff; }
+
+  .doc { padding: 0 2px; }
+
+  h2 {
+    font-size: 16.5pt;
+    margin: 30px 0 12px 0;
+    padding: 10px 16px;
+    border-radius: 8px;
+    color:#ffffff !important;
+    page-break-after: avoid;
+  }
+  h2.part1 { background: linear-gradient(90deg, var(--teal), #34d399); }
+  h2.part2 { background: linear-gradient(90deg, var(--rose), #fb7185); }
+  h2.part3 { background: linear-gradient(90deg, var(--amber), #fbbf24); color:#3a2400 !important; }
+  h2.part4 { background: linear-gradient(90deg, var(--purple), #a78bfa); }
+  h2.part5 { background: linear-gradient(90deg, var(--cyan), #22d3ee); }
+  h2.part6 { background: linear-gradient(90deg, var(--green), #4ade80); }
+  h2.plain { background: linear-gradient(90deg, var(--navy), var(--navy-2)); }
+
+  h3 { font-size: 12.6pt; margin: 20px 0 8px 0; padding-left: 10px; border-left: 5px solid var(--teal); page-break-after: avoid; }
+  h3.mgmt-h { border-left-color: var(--purple); }
+  h3.industry-h { border-left-color: var(--cyan); }
+
+  h4 { font-size: 11pt; margin: 14px 0 6px 0; color: var(--navy-2); }
+
+  p { margin: 8px 0; text-align: justify; }
+  a { color: var(--teal); text-decoration: none; border-bottom: 1px dotted var(--teal); }
+
+  code {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border: 1px solid #e4e0f5;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: "Consolas", "SFMono-Regular", Menlo, monospace;
+    font-size: 9.4pt;
+  }
+  pre {
+    background: #0f1b2d;
+    color: #d6e6ff;
+    border-radius: 10px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-size: 8.8pt;
+    line-height: 1.5;
+    margin: 10px 0 16px 0;
+    page-break-inside: avoid;
+  }
+  pre code { background: transparent; color: inherit; border: none; padding: 0; font-size: 8.8pt; }
+
+  ul, ol { margin: 6px 0 12px 0; padding-left: 22px; }
+  li { margin: 5px 0; text-align: justify; }
+  li::marker { color: var(--teal); font-weight: 700; }
+  strong { color: var(--navy-2); }
+
+  hr.sep { border: none; border-top: 2px dashed #cfd8e6; margin: 26px 0; }
+
+  .callout { border-radius: 10px; padding: 14px 18px; margin: 14px 0 18px 0; border-left: 6px solid var(--teal); background: var(--teal-light); }
+  .callout.exec { border-left-color: var(--navy); background: #eef3fb; }
+  .callout p { margin: 6px 0; text-align: justify; }
+
+  .split-box { display:flex; gap: 14px; margin: 14px 0; }
+  .plane-box { flex:1; border-radius: 10px; padding: 14px 16px; border: 1px solid var(--border); }
+  .plane-box.feeder { background: var(--teal-light); border-color: #b9e9e2; }
+  .plane-box.mgmt { background: var(--purple-light); border-color: #dccbf7; }
+  .plane-box .title { font-weight:700; font-size: 11pt; margin-bottom:6px; }
+  .plane-box.feeder .title { color: var(--teal); }
+  .plane-box.mgmt .title { color: var(--purple); }
+
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 18px 0; font-size: 9.3pt; page-break-inside: auto; }
+  th, td { border: 1px solid var(--border); padding: 7px 9px; text-align: left; vertical-align: top; }
+  thead th { background: var(--navy); color: #ffffff; font-weight: 700; font-size: 9.3pt; }
+  tbody tr:nth-child(even) { background: #f5f8fc; }
+  tbody tr:nth-child(odd) { background: #ffffff; }
+
+  .diagram { text-align: center; background: #fbfcfe; border: 1px solid var(--border); border-radius: 10px; padding: 14px 10px 8px 10px; margin: 14px 0; page-break-inside: avoid; }
+  .diagram img { max-width: 100%; height: auto; }
+  .diagram-caption { text-align:center; font-size: 9pt; color: var(--muted); font-style: italic; margin-top: 4px; }
+
+  .refs li { font-size: 9.5pt; }
+
+  .footer-note { margin-top: 30px; padding: 12px 16px; background: var(--navy); color: #eaf1ff; border-radius: 8px; font-size: 9pt; text-align:center; }
+
+  .tag { display:inline-block; font-size: 8.4pt; font-weight:700; padding: 2px 8px; border-radius: 999px; margin-right: 4px; }
+  .tag.feeder { background: var(--teal-light); color: var(--teal); border:1px solid #b9e9e2;}
+  .tag.mgmt { background: var(--purple-light); color: var(--purple); border:1px solid #dccbf7;}
+</style>
+</head>
+<body>
+
+<!-- ================= COVER ================= -->
+<div class="cover">
+  <span class="kicker">Package-Level Architecture Design Proposal</span>
+  <h1>Where Should the Management gRPC Server Live?</h1>
+  <p class="subtitle">A design for registering KubeArmor's Management services (PolicyService, ProbeService, StateAgent) without overloading the feeder package — a follow-up to the Observability/Management plane separation proposal.</p>
+
+  <div class="cover-badges">
+    <div class="cover-badge"><span class="k">Status</span><span class="v">Draft for review</span></div>
+    <div class="cover-badge"><span class="k">Type</span><span class="v">Package-level design proposal</span></div>
+    <div class="cover-badge"><span class="k">Relationship</span><span class="v">Follow-up to plane separation proposal</span></div>
+    <div class="cover-badge"><span class="k">Scope</span><span class="v">feeder / core / policy / state / new packages</span></div>
+    <div class="cover-badge"><span class="k">Prepared by</span><span class="v">Contributor Sagar Khandagre</span></div>
+  </div>
+
+  <div class="cover-planes">
+    <div class="plane-chip feeder">
+      <div class="t">feeder (narrowed)</div>
+      <div class="d">Observability transport (LogService) + the shared Logger utility used across the daemon</div>
+    </div>
+    <div class="plane-chip mgmt">
+      <div class="t">management (new)</div>
+      <div class="d">Dedicated transport owner for PolicyService, ProbeService, StateAgent — a peer of feeder, not a subordinate of it</div>
+    </div>
+  </div>
+</div>
+
+<div class="doc">
+
+<!-- ================= EXEC SUMMARY ================= -->
+<h2 class="plain">Executive Summary</h2>
+<div class="callout exec">
+<p>The previous proposal established <em>that</em> KubeArmor should split its gRPC surface into an <strong>Observability Server</strong> (<code>LogService</code>) and a <strong>Management Server</strong> (<code>PolicyService</code>, <code>ProbeService</code>, <code>StateAgent</code>). This document answers the natural follow-up question the split raises: <strong>where, in the codebase, should the Management Server's transport and registration logic actually live?</strong></p>
+<p>The <code>feeder</code> package's own doc comment states its job precisely: <em>"Package feeder is responsible for sanitizing and relaying telemetry and alerts data to connected clients."</em> Nothing in that charter mentions policy, probe, or state administration. Yet today, <code>core/kubeArmor.go</code> reaches into <code>dm.Logger.LogServer</code> — a field owned by <code>feeder</code> — and registers <code>PolicyService</code>, <code>ProbeService</code>, and <code>StateAgent</code> onto it. This document shows that this is a design smell, not a necessity: the business logic for these services already lives in clean, dedicated packages (<code>policy</code>, <code>state</code>, and <code>core</code>'s own <code>Probe</code>); only the <em>transport hosting</em> is misplaced.</p>
+</div>
+
+<p><strong>Recommendation:</strong> introduce a small, dedicated <code>management</code> package — a peer of <code>feeder</code>, not a subordinate of it — that owns the Management Server's listener, <code>grpc.Server</code>, health/reflection registration, and lifecycle. Both <code>feeder</code> and <code>management</code> share a new, minimal, business-logic-free <code>grpcutil</code> package for TLS/listener/keepalive plumbing, so neither duplicates code nor depends on the other. <code>core</code> remains the single composition root that wires business-logic packages onto the correct transport.</p>
+
+<hr class="sep">
+
+<!-- ================= PART 1 ================= -->
+<h2 class="part1">Part 1 — Understanding the Feeder's Real Job</h2>
+
+<h3>1.1 What the code says feeder is for</h3>
+<pre><code>// Package feeder is responsible for sanitizing and relaying telemetry and alerts data to connected clients
+package feeder</code></pre>
+<p>This is not an incidental comment — it matches everything the package actually does: <code>BaseFeeder</code> owns <code>EventStructs</code> (the <code>MsgStructs</code>/<code>AlertStructs</code>/<code>LogStructs</code> fan-out registries), <code>PushMessage</code>/<code>PushLog</code>/<code>PushAlert</code> feed them, and <code>logServer.go</code> implements exactly one gRPC service, <code>LogService</code>, streaming those events out. Every part of <code>feeder</code>'s design — bounded per-client queues, throttling state, the <code>LogService</code> handlers — exists to serve <strong>one job: telemetry relay.</strong></p>
+
+<h3 class="mgmt-h">1.2 Feeder's second, legitimate role: the injectable Logger utility</h3>
+<p>Feeder is not only a telemetry transport — it is also the <strong>structured logging facade used almost everywhere else in the daemon.</strong> Grepping the codebase shows <code>*fd.Feeder</code> injected as a <code>Logger</code> field into most other subsystems, used exclusively for <code>.Print</code> / <code>.Errf</code> / <code>.Warnf</code> / <code>.Debug</code> calls:</p>
+
+<table>
+<thead><tr><th>Consumer package</th><th>Field</th><th>Used for</th></tr></thead>
+<tbody>
+<tr><td><code>enforcer</code> (RuntimeEnforcer, BPFEnforcer, AppArmorEnforcer, SELinuxEnforcer)</td><td><code>Logger *fd.Feeder</code></td><td><code>.Print</code> / <code>.Errf</code> / <code>.Warnf</code> — status and error logging only</td></tr>
+<tr><td><code>monitor</code> (SystemMonitor)</td><td><code>fd.Feeder</code> reference</td><td>Structured logging + raw event hand-off into <code>PushMessage</code></td></tr>
+<tr><td><code>presets</code> (base.Preset and implementations)</td><td><code>fd.Feeder</code> reference</td><td><code>.Errf</code> / <code>.Print</code> for preset lifecycle logging</td></tr>
+<tr><td><code>networkPolicyEnforcer</code></td><td><code>fd.Feeder</code> reference</td><td><code>.Errf</code> / <code>.Print</code> for enforcement status logging</td></tr>
+<tr><td><code>core</code> (KubeArmorDaemon)</td><td><code>Logger *fd.Feeder</code></td><td>Logging <strong>and</strong> (today) the transport being reused for management registration</td></tr>
+</tbody>
+</table>
+
+<p>This table is the crux of the analysis: <strong>every one of these consumers only ever touches feeder's logging surface.</strong> None of them call, reference, or care about <code>LogServer</code>/<code>Listener</code>. Feeder is a legitimate, heavily-shared dependency for logging — that role must <em>not</em> be disturbed by this proposal. The problem is narrower and sharper than "feeder is overused" — it is specifically that <strong>one field, <code>LogServer *grpc.Server</code>, is being treated as a general-purpose gRPC registration point</strong> by code outside the package, for services that have nothing to do with feeder's charter.</p>
+
+<h3>1.3 Where the Management services' business logic already lives</h3>
+<p>This is the most important finding: <strong>the business logic for the Management plane is already cleanly separated</strong> — it is only the <em>transport wiring</em> that is not.</p>
+
+<table>
+<thead><tr><th>Service</th><th>Business logic package</th><th>Package doc comment</th><th>Transport registration today</th></tr></thead>
+<tbody>
+<tr><td><code>PolicyService</code></td><td><code>policy</code> (<code>PolicyServer</code> struct)</td><td>"Package policy handles policy updates over gRPC in non-k8s environment"</td><td><code>pb.RegisterPolicyServiceServer(dm.Logger.LogServer, policyService)</code></td></tr>
+<tr><td><code>StateAgent</code></td><td><code>state</code> (<code>StateAgent</code> struct)</td><td>"package state implements the state agent service..."</td><td><code>pb.RegisterStateAgentServer(dm.Logger.LogServer, dm.StateAgent)</code></td></tr>
+<tr><td><code>ProbeService</code></td><td><code>core/karmorprobedata.go</code> (<code>Probe</code> struct)</td><td>(no dedicated package yet)</td><td><code>pb.RegisterProbeServiceServer(dm.Logger.LogServer, probe)</code></td></tr>
+</tbody>
+</table>
+
+<p><code>policy</code> and <code>state</code> are <strong>already</strong> independent, transport-free packages with zero knowledge of <code>grpc.Server</code>, TLS, or listeners — exactly the shape you want for business logic. The only place any of this reaches for a transport is three call sites in <code>core/kubeArmor.go</code>, and all three reach for the same wrong object: <code>dm.Logger.LogServer</code>.</p>
+
+<hr class="sep">
+
+<!-- ================= PART 2 ================= -->
+<h2 class="part2">Part 2 — Why This Is a Design Smell</h2>
+<ol>
+  <li><strong>It contradicts the package's own stated charter.</strong> A reader who trusts <code>feeder</code>'s doc comment will not expect to find <code>PolicyService</code> — a policy-mutation surface — reachable through the same object.</li>
+  <li><strong>It creates an invisible, non-local coupling.</strong> The registration happens in <code>core/kubeArmor.go</code>, not in <code>feeder</code>, so nothing in the <code>feeder</code> package itself signals its server also serves administrative RPCs.</li>
+  <li><strong>It piggybacks on a fan-in dependency.</strong> Because <code>enforcer</code>, <code>monitor</code>, <code>presets</code>, and <code>networkPolicyEnforcer</code> all depend on <code>feeder</code> for logging, any future change to management-facing server behavior sits inside the same package that a large, unrelated swath of the codebase compiles against.</li>
+  <li><strong>It breaks the symmetry the codebase has already established.</strong> <code>policy</code> and <code>state</code> are dedicated, transport-free packages. Bolting their transport onto <code>feeder</code> is an asymmetry — two planes get a "home," Management does not.</li>
+  <li><strong>It has no natural growth boundary.</strong> Every new admin RPC compounds the anti-pattern, because the only existing precedent is "register it on <code>dm.Logger.LogServer</code> too."</li>
+  <li><strong>It complicates testing.</strong> Testing <code>PolicyService</code> today requires standing up a full <code>feeder.Feeder</code> (file output, throttle maps, <code>EventStructs</code>) even though <code>PolicyService</code> has nothing to do with any of that.</li>
+  <li><strong>It is the same anti-pattern as before, one layer down.</strong> The original problem was "one <code>grpc.Server</code> for two planes." If the split still leaves <code>core</code> reaching into a feeder-owned field, the fix is cosmetic, not structural.</li>
+</ol>
+
+<hr class="sep">
+
+<!-- ================= PART 3 ================= -->
+<h2 class="part3">Part 3 — Design Alternatives Considered</h2>
+<table>
+<thead><tr><th>Alternative</th><th>Description</th><th>Verdict</th></tr></thead>
+<tbody>
+<tr><td><strong>A. Status quo</strong></td><td>Keep registering on <code>dm.Logger.LogServer</code> (or its post-split successor)</td><td><strong>Rejected.</strong> Reproduces the exact coupling from Part 2; a cosmetic rename, not real separation.</td></tr>
+<tr><td><strong>B. Inline in core</strong></td><td>Add a second <code>grpc.Server</code>/listener directly as fields on <code>KubeArmorDaemon</code>, built inline in <code>kubeArmor.go</code></td><td><strong>Rejected as primary.</strong> <code>core</code> is already the largest, least modular package; this deepens the monolith and gives Management no independently testable unit.</td></tr>
+<tr><td><strong>C. Second server field inside feeder</strong></td><td>Add <code>fd.ManagementServer</code> alongside <code>fd.LogServer</code>, still inside <code>feeder</code></td><td><strong>Rejected.</strong> Every logging-only consumer of <code>feeder</code> would compile against unrelated control-plane transport code; makes the doc comment misleading; entangles lifecycles.</td></tr>
+<tr><td><strong>D. Dedicated management package (recommended)</strong></td><td>A new package, peer to <code>feeder</code>/<code>policy</code>/<code>state</code>, owning only the Management transport</td><td><strong>Recommended.</strong> Restores symmetry, keeps <code>feeder</code> honest, independently testable, zero change for logging-only consumers.</td></tr>
+</tbody>
+</table>
+
+<hr class="sep">
+
+<!-- ================= PART 4 ================= -->
+<h2 class="part4">Part 4 — Recommended Architecture</h2>
+
+<h3 class="mgmt-h">4.1 Package layers (target state)</h3>
+<div class="diagram">
+  <img src="pdf_assets_mgmt_pkg/diagram2_proposed_layers.svg" alt="Layered package architecture: orchestration, transport owners, business logic, shared kernel">
+</div>
+<p class="diagram-caption">Figure 1 — Four strict layers; dependencies only point downward; feeder and management never depend on each other.</p>
+
+<p>This is a strict four-layer dependency-inversion structure. <code>feeder</code> and <code>management</code> never depend on each other. <code>policy</code>, <code>state</code>, and a proposed new <code>probe</code> package (extracted from <code>core/karmorprobedata.go</code> for symmetry) know nothing about gRPC transport at all — they simply implement the generated <code>pb.*Server</code> interfaces. <code>core</code> is the only package allowed to know about <em>both</em> transport and business logic, because composition is its job.</p>
+
+<h3>4.2 What changes vs. today</h3>
+<div class="diagram">
+  <img src="pdf_assets_mgmt_pkg/diagram4_dependency_before_after.svg" alt="Dependency graph before and after: core no longer reaches into feeder for management registration">
+</div>
+<p class="diagram-caption">Figure 2 — Before/after dependency graph. Logging-only consumers of feeder are entirely unaffected.</p>
+
+<p>Note what does <strong>not</strong> change: <code>enforcer</code>, <code>monitor</code>, <code>presets</code>, and <code>networkPolicyEnforcer</code> keep exactly the same dependency on <code>feeder</code> they have today, for exactly the same reason (logging). This design change is entirely invisible to them.</p>
+
+<h3 class="industry-h">4.3 Startup sequence</h3>
+<div class="diagram">
+  <img src="pdf_assets_mgmt_pkg/diagram3_startup_sequence.svg" alt="Sequence diagram of daemon startup wiring both the Observability and Management servers">
+</div>
+<p class="diagram-caption">Figure 3 — core constructs both transport owners, then registers business-logic structs before serving either.</p>
+
+<hr class="sep">
+
+<!-- ================= PART 5 ================= -->
+<h2 class="part5">Part 5 — Proposed Package Responsibilities</h2>
+<table>
+<thead><tr><th>Package</th><th>Owns</th><th>Does not own</th><th>Depended on by</th></tr></thead>
+<tbody>
+<tr><td><code>grpcutil</code> (new)</td><td>Listener construction (tcp/unix), TLS credential loading (wraps <code>cert</code>), keepalive profiles</td><td>Any <code>pb.*Server</code> implementation or business logic</td><td><code>feeder</code>, <code>management</code></td></tr>
+<tr><td><code>feeder</code> (narrowed)</td><td><code>LogService</code> transport, injectable Logger utility, <code>EventStructs</code> fan-out</td><td><code>PolicyService</code>, <code>ProbeService</code>, <code>StateAgent</code></td><td><code>core</code>, <code>enforcer</code>, <code>monitor</code>, <code>presets</code>, <code>networkPolicyEnforcer</code></td></tr>
+<tr><td><code>management</code> (new)</td><td>Management transport, UDS default, own TLS/keepalive profile</td><td>Any business logic — only registers structs handed to it</td><td><code>core</code></td></tr>
+<tr><td><code>policy</code> (unchanged)</td><td><code>PolicyServer</code> business logic</td><td>Any transport, listener, or TLS concern</td><td><code>core</code></td></tr>
+<tr><td><code>state</code> (unchanged)</td><td><code>StateAgent</code> business logic</td><td>Any transport, listener, or TLS concern</td><td><code>core</code></td></tr>
+<tr><td><code>probe</code> (new, extracted)</td><td><code>Probe</code> business logic</td><td>Any transport, listener, or TLS concern</td><td><code>core</code></td></tr>
+<tr><td><code>core</code> (thinner)</td><td>Composition: constructs transport owners and business-logic structs, registers the latter onto the former</td><td>Any gRPC bootstrap logic</td><td>—</td></tr>
+</tbody>
+</table>
+
+<hr class="sep">
+
+<!-- ================= PART 6 ================= -->
+<h2 class="part6">Part 6 — API Sketches</h2>
+
+<h3 class="mgmt-h">6.1 The <code>management</code> package</h3>
+<pre><code>// Package management owns the Management gRPC server: PolicyService,
+// ProbeService, and StateAgent are registered onto it by core. This
+// package has no knowledge of policy, probe, or state business logic -
+// it only hosts the transport those services are registered on.
+package management
+
+type Server struct {
+    Listener     net.Listener
+    Server       *grpc.Server
+    HealthServer *health.Server
+    SocketPath   string // Unix Domain Socket path, default transport
+    Addr         string // optional TCP fallback (e.g. localhost:PORT)
+}
+
+type Config struct {
+    SocketPath       string // /var/run/kubearmor/kubearmor-management.sock
+    FallbackAddr     string // used only if UDS is unavailable (e.g. Windows)
+    TLSEnabled       bool
+    NodeIP           string
+    EnableReflection bool
+}
+
+// NewServer builds and binds the Management transport but does not
+// start serving; core registers business-logic servers first.
+func NewServer(cfg Config) (*Server, error)
+
+// Serve blocks, accepting Management RPCs. Call in a goroutine.
+func (s *Server) Serve() error
+
+// GracefulStop drains in-flight management RPCs and stops the server,
+// independent of the Observability server's lifecycle.
+func (s *Server) GracefulStop()</code></pre>
+
+<h3>6.2 The shared <code>grpcutil</code> package</h3>
+<pre><code>// Package grpcutil provides transport-only helpers shared by feeder
+// (Observability) and management (Management). It contains no
+// business logic and knows nothing about any specific gRPC service.
+package grpcutil
+
+type ListenerKind int
+const ( TCP ListenerKind = iota; UnixSocket )
+
+func NewListener(kind ListenerKind, addr string) (net.Listener, error)
+
+func LoadServerTLS(nodeIP string, certPath string) (credentials.TransportCredentials, error)
+
+type Profile int
+const ( StreamingProfile Profile = iota; UnaryProfile )
+
+// KeepaliveFor returns tuned keepalive settings per traffic profile,
+// instead of one hardcoded pair shared by every service.
+func KeepaliveFor(p Profile) (keepalive.EnforcementPolicy, keepalive.ServerParameters)</code></pre>
+
+<p><code>feeder.NewFeeder</code> is refactored to call <code>grpcutil.NewListener</code>/<code>grpcutil.LoadServerTLS</code>/<code>grpcutil.KeepaliveFor(grpcutil.StreamingProfile)</code> internally instead of hand-rolling that logic (today's private <code>loadTLSCredentials</code> in <code>feeder.go</code> moves here, unchanged in behavior). <code>management.NewServer</code> calls the same helpers with <code>grpcutil.UnaryProfile</code> and, by default, <code>grpcutil.UnixSocket</code>. Neither package imports the other.</p>
+
+<hr class="sep">
+
+<!-- ================= PART 7 (Migration) ================= -->
+<h2 class="plain">Part 7 — Migration Plan</h2>
+<p>This is intentionally incremental — every step compiles and runs on its own:</p>
+<ol>
+  <li><strong>Extract <code>grpcutil</code>.</strong> Move <code>loadTLSCredentials</code> and the <code>kaep</code>/<code>kasp</code> construction out of <code>feeder.go</code> into the new package, unchanged in behavior. <em>(No externally visible change.)</em></li>
+  <li><strong>Introduce the <code>management</code> package.</strong> Add <code>Server</code>/<code>Config</code>/<code>NewServer</code>/<code>Serve</code>/<code>GracefulStop</code>, built on <code>grpcutil</code>, defaulting to a Unix Domain Socket. <em>(New code, not yet wired in.)</em></li>
+  <li><strong>Extract <code>probe</code>.</strong> Move <code>Probe</code>/<code>GetProbeData</code> out of <code>core/karmorprobedata.go</code> into a new <code>probe</code> package, for symmetry with <code>policy</code> and <code>state</code>. <code>SetProbeContainerData</code> stays on <code>KubeArmorDaemon</code> since it is genuinely daemon state, not probe-service logic.</li>
+  <li><strong>Add <code>dm.ManagementServer</code> to <code>KubeArmorDaemon</code>.</strong> Add <code>InitManagementServer()</code>/<code>CloseManagementServer()</code> mirroring the existing <code>InitLogger()</code>/<code>CloseLogger()</code> pattern.</li>
+  <li><strong>Re-point the three registration call sites</strong> from <code>dm.Logger.LogServer</code> to <code>dm.ManagementServer.Server</code> for <code>PolicyService</code>, <code>ProbeService</code>, and <code>StateAgent</code>.</li>
+  <li><strong>Split health/reflection.</strong> Give <code>dm.ManagementServer</code> its own <code>health.Server</code> and <code>reflection.Register</code> call, independent of <code>dm.GRPCHealthServer</code>.</li>
+  <li><strong>Split lifecycle.</strong> <code>DestroyKubeArmorDaemon()</code> calls <code>dm.ManagementServer.GracefulStop()</code> alongside <code>dm.CloseLogger()</code>, so either can fail or drain independently.</li>
+  <li><strong>Update deployment/config surface.</strong> Add config fields for the management socket path/TLS, and update KubeArmorOperator manifests/RBAC for a Unix socket volume mount instead of (or alongside) a Service port.</li>
+</ol>
+<p>Each step leaves the daemon in a working, testable state — this can land as a sequence of small PRs rather than one large rewrite.</p>
+
+<hr class="sep">
+
+<!-- ================= PART 8 (Testing) ================= -->
+<h2 class="plain">Part 8 — Testing Implications</h2>
+<ul>
+  <li><code>management</code> gets its own <code>management_test.go</code>, following the exact pattern <code>feeder_test.go</code> already established (<code>net.Listen("tcp", ":0")</code> for a throwaway test listener) — without needing to construct a full <code>Feeder</code> just to test a unary RPC registration.</li>
+  <li><code>policy</code> and <code>state</code> tests remain entirely unchanged — they already test business logic against interfaces, not against a live server.</li>
+  <li><code>core</code>-level integration tests can now spin up <strong>just</strong> <code>management.Server</code> to test policy-push behavior, or <strong>just</strong> <code>feeder.Feeder</code> to test log streaming, instead of always needing the full daemon bring-up.</li>
+</ul>
+
+<hr class="sep">
+
+<!-- ================= PART 9 (Industry) ================= -->
+<h2 class="part5">Part 9 — Industry Precedent for This Specific Question</h2>
+<p>This proposal is about <em>package-level</em> ownership of service registration — a narrower, more code-structural question than the transport-level split in the first proposal. The clearest industry precedent is Kubernetes' own <strong>generic API server</strong> design.</p>
+<p>Kubernetes' <code>k8s.io/apiserver</code> defines a <code>RESTStorageProvider</code> interface — each API group (apps, batch, authorization, etc.) implements <code>NewRESTStorage(...) (APIGroupInfo, error)</code> in <strong>its own dedicated package</strong> (e.g. <code>pkg/registry/authorization/rest</code>), with zero knowledge of HTTP transport, TLS, or listener setup. A separate, shared <code>genericapiserver</code> package owns the actual transport, and a composition root (<code>cmd/kube-apiserver/app/server.go</code>, <code>CreateServerChain</code>) wires every group's provider onto the shared server. Kubernetes has actively refactored <em>away from</em> ad-hoc, legacy storage wiring toward this standard provider pattern (<a href="https://github.com/kubernetes/kubernetes/issues/119042">kubernetes/kubernetes#119042</a>, explicitly framed as reducing "spaghetti" wiring) — the same direction this proposal recommends for KubeArmor.</p>
+
+<table>
+<thead><tr><th>Kubernetes concept</th><th>KubeArmor equivalent</th></tr></thead>
+<tbody>
+<tr><td><code>RESTStorageProvider</code> implementation per API group</td><td><code>policy.PolicyServer</code>, <code>state.StateAgent</code>, <code>probe.Probe</code></td></tr>
+<tr><td><code>genericapiserver</code> (shared transport, no business logic)</td><td><code>management</code> package (+ shared <code>grpcutil</code> kernel)</td></tr>
+<tr><td><code>CreateServerChain</code> / composition root</td><td><code>core/kubeArmor.go</code>'s <code>KubeArmor()</code></td></tr>
+<tr><td>Refactor away from legacy ad-hoc storage wiring (#119042)</td><td>This migration: away from <code>dm.Logger.LogServer</code> reuse</td></tr>
+</tbody>
+</table>
+
+<p>Reference: <a href="https://github.com/kubernetes/apiserver/blob/master/ARCHITECTURE.md">Kubernetes apiserver ARCHITECTURE.md</a>; <a href="https://github.com/kubernetes/kubernetes/blob/master/pkg/controlplane/apiserver/apis.go"><code>RESTStorageProvider</code> / apis.go</a>; <a href="https://github.com/kubernetes/apiserver/blob/master/pkg/server/genericapiserver.go">genericapiserver.go</a>; <a href="https://github.com/kubernetes/kubernetes/issues/119042">kubernetes/kubernetes#119042</a>.</p>
+
+<hr class="sep">
+
+<!-- ================= PART 10 (Risks) ================= -->
+<h2 class="part2">Part 10 — Risks and Mitigations</h2>
+<table>
+<thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+<tbody>
+<tr><td>Adding a new package increases import graph size</td><td>Small package (listener + grpc.Server + health/reflection lifecycle, no business logic), mirrors feeder's already-understood shape</td></tr>
+<tr><td>Duplicated TLS/keepalive logic between feeder and management</td><td><code>grpcutil</code> exists specifically to prevent that duplication</td></tr>
+<tr><td>Migration touches <code>core/kubeArmor.go</code>, a large sensitive file</td><td>Migration plan (Part 7) is staged so each step compiles independently and can be reviewed/reverted in isolation</td></tr>
+<tr><td>Unix Domain Socket default may not suit all environments (e.g. Windows)</td><td><code>management.Config.FallbackAddr</code> supports a localhost-bound TCP fallback</td></tr>
+<tr><td>Extracting <code>probe</code> from <code>core</code> could be seen as scope creep</td><td>Framed as optional; the core recommendation (dedicated <code>management</code> package) stands even if <code>Probe</code> stays in <code>core</code></td></tr>
+</tbody>
+</table>
+
+<hr class="sep">
+
+<!-- ================= CONCLUSION ================= -->
+<h2 class="plain">Conclusion</h2>
+<p>The first proposal established that KubeArmor needs two gRPC transports: one for Observability, one for Management. This document answers where the second one should actually be built: <strong>not inside <code>feeder</code></strong>, which is correctly scoped to telemetry relay and is too widely depended-upon (by <code>enforcer</code>, <code>monitor</code>, <code>presets</code>, <code>networkPolicyEnforcer</code>) to also carry control-plane transport concerns, but in a <strong>new, dedicated <code>management</code> package</strong> — a peer of <code>feeder</code>, symmetric with the already-well-separated <code>policy</code> and <code>state</code> business-logic packages, and built on a small shared <code>grpcutil</code> kernel so neither transport owner duplicates code or depends on the other. <code>core</code> remains the single, explicit composition root, exactly mirroring the <code>RESTStorageProvider</code> / <code>genericapiserver</code> pattern Kubernetes itself uses to keep API-group business logic separate from server transport. This is an incremental, low-risk migration (Part 7) that can land as a sequence of small, independently reviewable changes.</p>
+
+<hr class="sep">
+
+<!-- ================= REFERENCES ================= -->
+<h2 class="plain">References</h2>
+<ul class="refs">
+  <li>KubeArmor source: <code>KubeArmor/KubeArmor/feeder/feeder.go</code>, <code>KubeArmor/KubeArmor/feeder/logServer.go</code>, <code>KubeArmor/KubeArmor/core/kubeArmor.go</code>, <code>KubeArmor/KubeArmor/core/karmorprobedata.go</code>, <code>KubeArmor/KubeArmor/policy/policy.go</code>, <code>KubeArmor/KubeArmor/state/stateAgent.go</code>, <code>KubeArmor/KubeArmor/enforcer/*.go</code>, <code>KubeArmor/KubeArmor/monitor/systemMonitor.go</code>, <code>KubeArmor/KubeArmor/presets/*</code>, <code>KubeArmor/KubeArmor/networkPolicyEnforcer/networkPolicyEnforcer.go</code>.</li>
+  <li>Kubernetes generic apiserver: <a href="https://github.com/kubernetes/apiserver/blob/master/ARCHITECTURE.md">ARCHITECTURE.md</a>, <a href="https://github.com/kubernetes/kubernetes/blob/master/pkg/controlplane/apiserver/apis.go">RESTStorageProvider / apis.go</a>, <a href="https://github.com/kubernetes/apiserver/blob/master/pkg/server/genericapiserver.go">genericapiserver.go</a>, <a href="https://github.com/kubernetes/kubernetes/issues/119042">kubernetes/kubernetes#119042</a>.</li>
+  <li>Prior proposal: <em>Separating KubeArmor's Observability Plane and Management Plane</em> (same directory).</li>
+</ul>
+
+<div class="footer-note">KubeArmor Design Proposal — Management Server Package Placement &nbsp;•&nbsp; Draft for maintainer review &nbsp;•&nbsp; Prepared by Contributor Sagar Khandagre</div>
+
+</div>
+</body>
+</html>

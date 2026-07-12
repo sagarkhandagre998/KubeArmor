@@ -1,0 +1,29 @@
+flowchart TB
+    subgraph L3["Layer 3 - Orchestration"]
+        CORE2["core: KubeArmorDaemon wires everything together"]
+    end
+
+    subgraph L2["Layer 2 - Transport owners"]
+        FEEDER2["feeder: Observability Server (LogService) + Logger utility"]
+        MGMT2["management: Management Server (PolicyService, ProbeService, StateAgent)"]
+    end
+
+    subgraph L1["Layer 1 - Business logic, no transport"]
+        POLICY2["policy.PolicyServer"]
+        STATE2["state.StateAgent"]
+        PROBE2["probe.Probe"]
+    end
+
+    subgraph L0["Layer 0 - Shared kernel, no business logic"]
+        GRPCUTIL["grpcutil: listener + TLS + keepalive helpers"]
+        CERT["cert: certificate loading"]
+    end
+
+    CORE2 --> FEEDER2
+    CORE2 --> MGMT2
+    MGMT2 --> POLICY2
+    MGMT2 --> STATE2
+    MGMT2 --> PROBE2
+    FEEDER2 --> GRPCUTIL
+    MGMT2 --> GRPCUTIL
+    GRPCUTIL --> CERT

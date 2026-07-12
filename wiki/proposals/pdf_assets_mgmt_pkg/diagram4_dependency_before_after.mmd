@@ -1,0 +1,19 @@
+flowchart TB
+    subgraph Before["Before: ad-hoc coupling"]
+        direction LR
+        B_CORE["core"] -->|"reaches into"| B_FEEDER["feeder.LogServer"]
+        B_POLICY["policy"] -.->|"handed to core, then registered on"| B_FEEDER
+        B_STATE["state"] -.->|"handed to core, then registered on"| B_FEEDER
+        B_ENF["enforcer / monitor / presets / networkPolicyEnforcer"] -->|"logging only"| B_FEEDER
+    end
+
+    subgraph After["After: explicit ownership"]
+        direction LR
+        A_CORE["core"] --> A_FEEDER["feeder (Observability)"]
+        A_CORE --> A_MGMT["management (Management)"]
+        A_POLICY["policy"] --> A_MGMT
+        A_STATE["state"] --> A_MGMT
+        A_ENF["enforcer / monitor / presets / networkPolicyEnforcer"] -->|"logging only"| A_FEEDER
+        A_FEEDER --> A_UTIL["grpcutil"]
+        A_MGMT --> A_UTIL
+    end

@@ -1,0 +1,35 @@
+flowchart TB
+    subgraph Consumers["Packages that only need logging"]
+        ENF["enforcer"]
+        MON["monitor"]
+        PRE["presets"]
+        NPE["networkPolicyEnforcer"]
+    end
+
+    subgraph FeederPkg["feeder package - dual role today"]
+        LOGUTIL["Logger utility: Print / Errf / Warn / PushMessage"]
+        LOGSRV["LogServer *grpc.Server + Listener - Observability transport"]
+    end
+
+    subgraph BizPkgs["Business-logic packages - no transport code"]
+        POLICY["policy.PolicyServer"]
+        STATE["state.StateAgent"]
+        PROBE["core.Probe in karmorprobedata.go"]
+    end
+
+    subgraph CorePkg["core package: KubeArmor() orchestration"]
+        WIRING["reaches into dm.Logger.LogServer to register management services"]
+    end
+
+    ENF -->|".Errf / .Print"| LOGUTIL
+    MON -->|".Errf / .Print"| LOGUTIL
+    PRE -->|".Errf / .Print"| LOGUTIL
+    NPE -->|".Errf / .Print"| LOGUTIL
+    CorePkg -->|".Errf / .Print"| LOGUTIL
+
+    POLICY --> WIRING
+    STATE --> WIRING
+    PROBE --> WIRING
+    WIRING -->|"pb.RegisterPolicyServiceServer"| LOGSRV
+    WIRING -->|"pb.RegisterStateAgentServer"| LOGSRV
+    WIRING -->|"pb.RegisterProbeServiceServer"| LOGSRV

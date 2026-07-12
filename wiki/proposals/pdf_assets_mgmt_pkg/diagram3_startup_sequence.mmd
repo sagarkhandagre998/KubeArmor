@@ -1,0 +1,19 @@
+sequenceDiagram
+    participant Core as core.KubeArmor()
+    participant Feeder as feeder.NewFeeder
+    participant Mgmt as management.NewManagementServer
+    participant Policy as policy.PolicyServer
+    participant State as state.StateAgent
+
+    Core->>Feeder: InitLogger() -> NewFeeder()
+    Feeder-->>Core: Observability server + listener ready
+    Core->>Mgmt: InitManagementServer() -> NewManagementServer()
+    Mgmt-->>Core: Management server + listener ready (UDS by default)
+    Core->>Policy: construct PolicyServer{...}
+    Core->>Mgmt: RegisterPolicyServiceServer(mgmt.Server, policyServer)
+    Core->>State: NewStateAgent(...)
+    Core->>Mgmt: RegisterStateAgentServer(mgmt.Server, stateAgent)
+    Core->>Mgmt: RegisterProbeServiceServer(mgmt.Server, probe)
+    Core->>Feeder: go ServeLogFeeds() (Observability)
+    Core->>Mgmt: go Serve() (Management)
+    Note over Feeder,Mgmt: Two independent goroutines, two listeners, two lifecycles
