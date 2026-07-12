@@ -1,0 +1,12 @@
+sequenceDiagram
+    participant Relay as KubeArmor-Relay
+    participant ObsSrv as Observability Server
+    participant MgmtSrv as Management Server
+    participant Op as Operator (policy push)
+
+    Relay->>ObsSrv: WatchAlerts (open stream)
+    ObsSrv-->>Relay: Alert #1
+    ObsSrv-->>Relay: Alert #2 (log storm begins)
+    Op->>MgmtSrv: containerPolicy(update)
+    MgmtSrv->>Op: response (immediate, unaffected by ObsSrv load)
+    ObsSrv-->>Relay: Alert #3 ... #N

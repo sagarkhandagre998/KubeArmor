@@ -1,0 +1,25 @@
+flowchart TB
+    subgraph KubeArmorDaemon["KubeArmor Daemon Process"]
+        subgraph ObsServer["Observability grpc.Server"]
+            LS["LogService: WatchMessages / WatchAlerts / WatchLogs"]
+            ObsHealth["health + reflection (observability scope)"]
+        end
+        subgraph MgmtServer["Management grpc.Server"]
+            PS["PolicyService"]
+            PB["ProbeService"]
+            SA["StateAgent"]
+            MgmtHealth["health + reflection (management scope)"]
+        end
+        ObsListener["Listener A: TCP :32767 (configurable) - Observability TLS cert"]
+        MgmtListener["Listener B: Unix Domain Socket or localhost-only TCP - Management TLS/mTLS cert"]
+        ObsListener --> ObsServer
+        MgmtListener --> MgmtServer
+    end
+
+    Relay["KubeArmor-Relay"] --> ObsListener
+    CLI["karmor logs"] --> ObsListener
+    SIEM["Future SIEM adapters"] --> ObsListener
+
+    Operator["KubeArmorController"] --> MgmtListener
+    PolicyCLI["karmor policy / karmor probe"] --> MgmtListener
+    StateWatcher["State watcher"] --> MgmtListener

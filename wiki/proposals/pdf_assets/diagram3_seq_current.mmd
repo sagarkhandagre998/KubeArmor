@@ -1,0 +1,12 @@
+sequenceDiagram
+    participant Relay as KubeArmor-Relay
+    participant Srv as grpc.Server (shared)
+    participant Op as Operator (policy push)
+
+    Relay->>Srv: WatchAlerts (open stream)
+    Srv-->>Relay: Alert #1
+    Srv-->>Relay: Alert #2 (log storm begins)
+    Op->>Srv: containerPolicy(update)
+    Note over Srv: containerPolicy queued behind same server's accept/goroutine scheduling as the alert storm
+    Srv-->>Relay: Alert #3 ... #N
+    Srv->>Op: response (delayed)

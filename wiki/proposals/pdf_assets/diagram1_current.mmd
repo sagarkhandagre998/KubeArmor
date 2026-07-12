@@ -1,0 +1,18 @@
+flowchart TB
+    subgraph KubeArmorDaemon["KubeArmor Daemon Process"]
+        subgraph SingleServer["Single grpc.Server (fd.LogServer)"]
+            LS["LogService: WatchMessages / WatchAlerts / WatchLogs"]
+            PS["PolicyService: containerPolicy / hostPolicy / networkPolicy"]
+            PB["ProbeService: getProbeData"]
+            SA["StateAgent: WatchState / GetState"]
+            HC["grpc_health_v1 + reflection"]
+        end
+        Listener["single net.Listener: one TCP port, one TLS cert"]
+        Listener --> SingleServer
+    end
+
+    Relay["KubeArmor-Relay"] -->|WatchAlerts/WatchLogs| Listener
+    CLI["karmor logs"] -->|WatchAlerts/WatchLogs| Listener
+    Operator["KubeArmorController / karmor policy"] -->|containerPolicy/hostPolicy| Listener
+    Debug["karmor probe"] -->|getProbeData| Listener
+    StateWatcher["External state watcher"] -->|WatchState| Listener

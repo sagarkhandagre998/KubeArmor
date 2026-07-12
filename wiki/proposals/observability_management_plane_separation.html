@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Architecture Proposal: Separating KubeArmor's Observability Plane and Management Plane</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 16mm 20mm 16mm;
+  }
+
+  :root{
+    --navy:#0b2545;
+    --navy-2:#123b6d;
+    --blue:#2563eb;
+    --blue-light:#eaf2ff;
+    --amber:#d97706;
+    --amber-light:#fef3e2;
+    --teal:#0d9488;
+    --teal-light:#e6fbf8;
+    --purple:#7c3aed;
+    --purple-light:#f2eaff;
+    --green:#16a34a;
+    --green-light:#eafbf0;
+    --red:#dc2626;
+    --red-light:#fdeceb;
+    --ink:#1a2233;
+    --muted:#57667a;
+    --border:#e1e7ef;
+    --code-bg:#f1f4f9;
+    --code-ink:#b3261e;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin:0; padding:0;
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    color: var(--ink);
+    font-size: 10.6pt;
+    line-height: 1.55;
+    background: #ffffff;
+  }
+
+  h1, h2, h3, h4 { font-family: "Segoe UI Semibold", "Segoe UI", Arial, sans-serif; color: var(--navy); line-height:1.25; }
+
+  /* ---------- Cover ---------- */
+  .cover {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-2) 45%, var(--blue) 100%);
+    color: #ffffff;
+    border-radius: 14px;
+    padding: 46px 42px;
+    margin-bottom: 26px;
+    page-break-after: always;
+  }
+  .cover .kicker {
+    display:inline-block;
+    background: rgba(255,255,255,0.16);
+    border: 1px solid rgba(255,255,255,0.35);
+    color:#fff;
+    font-size: 9.5pt;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 5px 14px;
+    border-radius: 999px;
+    margin-bottom: 22px;
+  }
+  .cover h1 {
+    color:#ffffff;
+    font-size: 27pt;
+    margin: 0 0 14px 0;
+    max-width: 640px;
+  }
+  .cover p.subtitle {
+    color: #dce7fb;
+    font-size: 12.5pt;
+    max-width: 620px;
+    margin: 0 0 30px 0;
+  }
+  .cover-badges { display:flex; flex-wrap:wrap; gap:10px; margin-top: 26px; }
+  .cover-badge {
+    background: rgba(255,255,255,0.10);
+    border: 1px solid rgba(255,255,255,0.28);
+    border-radius: 10px;
+    padding: 10px 14px;
+    min-width: 190px;
+  }
+  .cover-badge .k { font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.05em; color:#b9d0f5; display:block; margin-bottom:3px;}
+  .cover-badge .v { font-size: 10pt; color:#fff; font-weight:600; }
+  .cover-planes { display:flex; gap:14px; margin-top: 34px; }
+  .plane-chip {
+    flex:1;
+    border-radius: 12px;
+    padding: 16px 16px;
+    color:#fff;
+  }
+  .plane-chip.obs { background: rgba(37,99,235,0.35); border:1px solid rgba(255,255,255,0.35);}
+  .plane-chip.mgmt { background: rgba(217,119,6,0.35); border:1px solid rgba(255,255,255,0.35);}
+  .plane-chip .t { font-weight:700; font-size:11pt; margin-bottom:4px; }
+  .plane-chip .d { font-size:9.3pt; color:#eef3fb; }
+
+  /* ---------- Body container ---------- */
+  .doc { padding: 0 2px; }
+
+  h2 {
+    font-size: 16.5pt;
+    margin: 30px 0 12px 0;
+    padding: 10px 16px;
+    border-radius: 8px;
+    color:#ffffff !important;
+    page-break-after: avoid;
+  }
+  h2.part1 { background: linear-gradient(90deg, var(--blue), #4f8cf7); }
+  h2.part2 { background: linear-gradient(90deg, var(--red), #f06b5f); }
+  h2.part3 { background: linear-gradient(90deg, var(--purple), #a78bfa); }
+  h2.part4 { background: linear-gradient(90deg, var(--green), #4ade80); }
+  h2.part5 { background: linear-gradient(90deg, var(--amber), #fbbf24); color:#3a2400 !important;}
+  h2.part6 { background: linear-gradient(90deg, var(--teal), #34d399); }
+  h2.plain { background: linear-gradient(90deg, var(--navy), var(--navy-2)); }
+
+  h3 {
+    font-size: 12.6pt;
+    margin: 20px 0 8px 0;
+    padding-left: 10px;
+    border-left: 5px solid var(--blue);
+    page-break-after: avoid;
+  }
+  h3.mgmt-h { border-left-color: var(--amber); }
+  h3.industry-h { border-left-color: var(--teal); }
+
+  h4 { font-size: 11pt; margin: 14px 0 6px 0; color: var(--navy-2); }
+
+  p { margin: 8px 0; text-align: justify; }
+
+  a { color: var(--blue); text-decoration: none; border-bottom: 1px dotted var(--blue); }
+
+  code {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border: 1px solid #e4e0f5;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: "Consolas", "SFMono-Regular", Menlo, monospace;
+    font-size: 9.4pt;
+  }
+
+  ul, ol { margin: 6px 0 12px 0; padding-left: 22px; }
+  li { margin: 5px 0; text-align: justify; }
+  li::marker { color: var(--blue); font-weight: 700; }
+
+  strong { color: var(--navy-2); }
+
+  hr.sep { border: none; border-top: 2px dashed #cfd8e6; margin: 26px 0; }
+
+  /* ---------- Callout boxes ---------- */
+  .callout {
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin: 14px 0 18px 0;
+    border-left: 6px solid var(--blue);
+    background: var(--blue-light);
+  }
+  .callout.exec { border-left-color: var(--navy); background: #eef3fb; }
+  .callout p { margin: 6px 0; text-align: justify; }
+  .callout .label {
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 8.6pt;
+    letter-spacing: 0.06em;
+    color: var(--navy);
+    margin-bottom: 6px;
+    display:block;
+  }
+
+  .split-box { display:flex; gap: 14px; margin: 14px 0; }
+  .plane-box {
+    flex:1;
+    border-radius: 10px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+  }
+  .plane-box.obs { background: var(--blue-light); border-color: #c9dcfb; }
+  .plane-box.mgmt { background: var(--amber-light); border-color: #f4d8ab; }
+  .plane-box .title { font-weight:700; font-size: 11pt; margin-bottom:6px; }
+  .plane-box.obs .title { color: var(--blue); }
+  .plane-box.mgmt .title { color: var(--amber); }
+
+  /* ---------- Tables ---------- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0 18px 0;
+    font-size: 9.3pt;
+    page-break-inside: auto;
+  }
+  table.meta { font-size: 10pt; }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 7px 9px;
+    text-align: left;
+    vertical-align: top;
+  }
+  thead th {
+    background: var(--navy);
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 9.3pt;
+  }
+  tbody tr:nth-child(even) { background: #f5f8fc; }
+  tbody tr:nth-child(odd) { background: #ffffff; }
+  table.meta thead th { background: var(--navy-2); }
+
+  /* ---------- Diagrams ---------- */
+  .diagram {
+    text-align: center;
+    background: #fbfcfe;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 10px 8px 10px;
+    margin: 14px 0;
+    page-break-inside: avoid;
+  }
+  .diagram img { max-width: 100%; height: auto; }
+  .diagram-caption {
+    text-align:center;
+    font-size: 9pt;
+    color: var(--muted);
+    font-style: italic;
+    margin-top: 4px;
+  }
+
+  /* Section wrapper for keeping heading + first paragraph together where sensible */
+  section { page-break-inside: auto; }
+
+  .refs li { font-size: 9.5pt; }
+
+  .footer-note {
+    margin-top: 30px;
+    padding: 12px 16px;
+    background: var(--navy);
+    color: #eaf1ff;
+    border-radius: 8px;
+    font-size: 9pt;
+    text-align:center;
+  }
+
+  .tag {
+    display:inline-block;
+    font-size: 8.4pt;
+    font-weight:700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-right: 4px;
+  }
+  .tag.obs { background: var(--blue-light); color: var(--blue); border:1px solid #c9dcfb;}
+  .tag.mgmt { background: var(--amber-light); color: var(--amber); border:1px solid #f4d8ab;}
+</style>
+</head>
+<body>
+
+<!-- ================= COVER ================= -->
+<div class="cover">
+  <span class="kicker">Architecture Design Proposal</span>
+  <h1>Separating KubeArmor's Observability Plane and Management Plane</h1>
+  <p class="subtitle">A research-backed proposal to split KubeArmor's single, multiplexed gRPC server into two independently secured, scaled, and operated planes — grounded in the current codebase and validated against industry precedent from Kubernetes, etcd, Istio, Cilium/Hubble, SPIRE, Falco, and HashiCorp Vault.</p>
+
+  <div class="cover-badges">
+    <div class="cover-badge"><span class="k">Status</span><span class="v">Draft for review</span></div>
+    <div class="cover-badge"><span class="k">Type</span><span class="v">Architecture design proposal</span></div>
+    <div class="cover-badge"><span class="k">Scope</span><span class="v">feeder / core / protobuf</span></div>
+    <div class="cover-badge"><span class="k">Audience</span><span class="v">Maintainers &amp; infra engineers</span></div>
+    <div class="cover-badge"><span class="k">Prepared by</span><span class="v">Contributor Sagar Khandagre</span></div>
+  </div>
+
+  <div class="cover-planes">
+    <div class="plane-chip obs">
+      <div class="t">Observability Server</div>
+      <div class="d">LogService — high-volume streaming telemetry (WatchMessages / WatchAlerts / WatchLogs)</div>
+    </div>
+    <div class="plane-chip mgmt">
+      <div class="t">Management Server</div>
+      <div class="d">PolicyService, ProbeService, StateAgent — low-volume, high-trust administrative RPCs</div>
+    </div>
+  </div>
+</div>
+
+<div class="doc">
+
+<!-- ================= EXECUTIVE SUMMARY ================= -->
+<h2 class="plain">Executive Summary</h2>
+
+<div class="callout exec">
+<p>KubeArmor currently multiplexes four gRPC services — <code>LogService</code>, <code>PolicyService</code>, <code>ProbeService</code>, and <code>StateAgent</code> — onto a <strong>single <code>grpc.Server</code> instance</strong> (<code>fd.LogServer</code> in <code>KubeArmor/KubeArmor/feeder/feeder.go</code>), bound to a <strong>single TCP listener</strong>, secured by a <strong>single TLS certificate</strong>, and governed by a <strong>single set of keepalive/interceptor settings</strong>.</p>
+
+<p>These four services are not peers. <code>LogService</code> is a high-volume, long-lived, read-only <strong>telemetry stream</strong> consumed by fan-out components such as KubeArmor-Relay and <code>karmor logs</code>. <code>PolicyService</code>, <code>ProbeService</code>, and <code>StateAgent</code> are low-volume, latency-sensitive, <strong>administrative/control RPCs</strong> consumed by orchestrators, operators, and human administrators. Coupling them at the transport layer means a telemetry storm can starve a policy update, a single certificate rotation affects both planes, and a single misconfigured interceptor can take down enforcement control alongside log delivery.</p>
+</div>
+
+<p>This proposal recommends splitting the daemon's gRPC surface into two independently-configured <code>grpc.Server</code> instances:</p>
+
+<div class="split-box">
+  <div class="plane-box obs">
+    <div class="title">Observability Server</div>
+    <code>LogService</code> only. Optimized for high fan-out, long-lived streaming, and external SIEM/log-pipeline exposure.
+  </div>
+  <div class="plane-box mgmt">
+    <div class="title">Management Server</div>
+    <code>PolicyService</code>, <code>ProbeService</code>, <code>StateAgent</code>. Optimized for low-latency administrative operations, tightly scoped trust (Unix Domain Socket or <code>localhost</code>-only), and future authn/authz enforcement.
+  </div>
+</div>
+
+<p>This mirrors an architectural pattern already validated at scale across the cloud-native ecosystem: Kubernetes (API server vs. kubelet read-only/secure ports), etcd (client port vs. peer port), Istio (Envoy data plane vs. Istiod control plane), Cilium/Hubble (embedded gRPC + Unix socket vs. Hubble Relay), SPIRE (Workload API over UDS vs. Server API over mTLS/TCP), and Falco (deprecating its own single embedded gRPC server model in favor of Unix-socket-first, decoupled output distribution). The remainder of this document analyzes the current design, justifies the split, and proposes a concrete target architecture.</p>
+
+<hr class="sep">
+
+<!-- ================= PART 1 ================= -->
+<h2 class="part1">Part 1 — Understanding the Existing Responsibilities</h2>
+
+<h3>1.1 The Observability Plane (Data Plane)</h3>
+
+<p><strong>Purpose.</strong> The observability plane exists to move a continuous stream of runtime security telemetry — system events, policy-violation alerts, and audit-style logs — from the point of collection (in-kernel eBPF/LSM hooks, translated by <code>KubeArmor/KubeArmor/monitor</code> and <code>KubeArmor/KubeArmor/feeder</code>) to the point of consumption (log processors, SIEMs, humans). It is, in essence, <strong>a telemetry pipeline that happens to be implemented as a gRPC service</strong>, not a management API that happens to emit logs.</p>
+
+<p><strong>Components that belong to it, grounded in the current codebase:</strong></p>
+<ul>
+  <li><code>LogService</code> (<code>KubeArmor/protobuf/kubearmor.proto</code>) — exposes <code>WatchMessages</code>, <code>WatchAlerts</code>, <code>WatchLogs</code>, all of which are <strong>server-streaming RPCs</strong>; the client opens one long-lived stream and receives events indefinitely.</li>
+  <li><code>feeder.BaseFeeder</code> / <code>feeder.Feeder</code> (<code>KubeArmor/KubeArmor/feeder/feeder.go</code>) — owns the <code>EventStructs</code> in-memory fan-out registry (<code>MsgStructs</code>, <code>AlertStructs</code>, <code>LogStructs</code>), each guarded by its own lock and pushed to via <code>PushMessage</code>/<code>PushLog</code>/<code>PushAlert</code>.</li>
+  <li><code>logServer.go</code> (<code>KubeArmor/KubeArmor/feeder/logServer.go</code>) — implements the per-client subscription lifecycle: <code>AddAlertStruct</code>/<code>AddLogStruct</code> register a bounded channel (<code>QueueSize: 1000</code>) per connected client, and the handler blocks on <code>svr.Send()</code> for the lifetime of the connection.</li>
+  <li><strong>KubeArmor-Relay</strong> — an external, independently-deployed component (see <code>pkg/KubeArmorOperator/common/defaults.go</code>, <code>KubeArmorRelayServerSecretName</code>, <code>GetRelayDeployment</code>) that connects to <code>LogService</code> as a client, aggregates logs/alerts across every node's <code>LogService</code> endpoint, and re-serves them to downstream consumers.</li>
+  <li><code>karmor logs</code> — the CLI client that either talks to a node's <code>LogService</code> directly (standalone/VM mode) or through the Relay (Kubernetes mode) to tail alerts/logs interactively.</li>
+  <li>Future SIEM / log-pipeline adapters (e.g. Elasticsearch, Splunk, Fluent Bit sidecars) that need a stable, high-throughput, read-only feed.</li>
+</ul>
+
+<p><strong>Client characteristics.</strong> Observability clients are typically <strong>long-lived, few-in-number-but-high-bandwidth, and read-only</strong>. A single Relay connection may stay open for the lifetime of the pod and carry thousands of events per second during an incident. Clients never need to mutate state; they only <code>Watch*</code>.</p>
+
+<p><strong>Traffic characteristics.</strong></p>
+<ul>
+  <li>Predominantly <strong>server push</strong> over a small number of persistent HTTP/2 streams.</li>
+  <li><strong>Bursty and adversary-correlated</strong>: a container escape attempt, a crypto-miner, or a fork-bomb can generate thousands of alerts per second — precisely when the system is under the most stress and policy responsiveness matters most.</li>
+  <li>Backpressure is already partially modeled today (<code>QueueSize: 1000</code>, drop/throttle logic in <code>AlertMap</code>/<code>AlertThrottleState</code>), which is itself evidence that this plane needs <strong>its own</strong> flow-control policy independent of anything else running on the same server.</li>
+</ul>
+
+<p><strong>Scalability requirements.</strong> Must scale with <strong>event volume</strong>, which is a function of workload count, policy verbosity, and attack surface — not with the number of administrative operations happening on the node. In large clusters (thousands of nodes, each streaming to a shared Relay tier) the observability plane is the dominant resource consumer of the KubeArmor gRPC surface by orders of magnitude.</p>
+
+<p><strong>Why it is fundamentally a telemetry pipeline.</strong> Every RPC in <code>LogService</code> is one-way, unbounded in duration, and stateless with respect to enforcement — the daemon's behavior (what gets blocked, what gets logged) never changes because a <code>WatchAlerts</code> client connected or disconnected. This is the defining property of a data-plane/telemetry component: it observes and exports; it does not decide.</p>
+
+<h3 class="mgmt-h">1.2 The Management Plane (Control Plane)</h3>
+
+<p><strong>Purpose.</strong> The management plane exists to let trusted operators and orchestration components <strong>change what KubeArmor enforces</strong> and <strong>inspect its administrative/runtime state</strong> — i.e., to drive the daemon's control loop, not to read its output.</p>
+
+<p><strong>Services that belong to it:</strong></p>
+<ul>
+  <li><code>PolicyService</code> (<code>KubeArmor/protobuf/policy.proto</code>) — <code>containerPolicy</code>, <code>hostPolicy</code>, <code>networkPolicy</code>. Unary RPCs that push a serialized policy object and mutate <code>dm.SecurityPolicies</code> / <code>dm.Node</code> state (<code>KubeArmor/KubeArmor/core/kubeArmor.go</code>, <code>ParseAndUpdateContainerSecurityPolicy</code> and siblings). This is the non-Kubernetes (VM/bare-metal/systemd) analogue of what the Kubernetes CRD controller does via the API server in K8s mode.</li>
+  <li><code>ProbeService</code> (<code>KubeArmor/protobuf/policy.proto</code>) — <code>getProbeData</code>. A unary, on-demand introspection RPC (<code>KubeArmor/KubeArmor/core/karmorprobedata.go</code>) returning currently loaded containers, hosts, and policies — used by <code>karmor probe</code> for debugging/inspection, not for continuous consumption.</li>
+  <li><code>StateAgent</code> (<code>KubeArmor/protobuf/state.proto</code>) — <code>WatchState</code>, <code>GetState</code>. Pushes structured state-change events (container/node lifecycle) — administrative/state-sync traffic consumed by external state trackers (dashboards, state-aware controllers), gated behind <code>cfg.GlobalCfg.StateAgent</code> and only active in non-K8s mode (<code>KubeArmor/KubeArmor/core/kubeArmor.go</code>, <code>InitStateAgent</code>).</li>
+</ul>
+
+<p><strong>Clients that consume it:</strong> the <code>karmor</code> CLI (policy push, probe, debug), the KubeArmorController/operator in orchestrated deployments, provisioning/automation scripts in VM mode, and (in the future) any external policy-management or GitOps system reconciling desired policy state onto the node.</p>
+
+<p><strong>Why it is fundamentally different from telemetry.</strong> Management RPCs are <strong>imperative and stateful</strong>: calling <code>containerPolicy</code> changes what the enforcer (LSM/eBPF) permits from that point forward. A dropped or delayed management RPC has a direct, immediate security consequence — a policy update that should have blocked a newly-scheduled workload didn't arrive in time. Management traffic is low-volume (bytes per call, calls per minute-to-hour, not per second), latency-sensitive in a <em>correctness</em> sense rather than a throughput sense, and requires a fundamentally different trust bar: only entities authorized to change enforcement behavior should be able to reach it at all.</p>
+
+<hr class="sep">
+
+<!-- ================= PART 2 ================= -->
+<h2 class="part2">Part 2 — Current Design Problems</h2>
+
+<p>The problem is not merely "telemetry and control share a TLS cert." The two planes are coupled across nearly every architectural dimension, and none of that coupling is intentional — it is an artifact of <code>dm.Logger.LogServer</code> being the only <code>grpc.Server</code> the daemon happens to construct.</p>
+
+<table>
+<thead>
+<tr><th>Dimension</th><th><span class="tag obs">Observability</span> LogService</th><th><span class="tag mgmt">Management</span> Policy / Probe / State</th><th>Consequence of sharing one grpc.Server</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>Client responsibility</strong></td><td>Passive consumer: read-only stream tailing</td><td>Active operator: mutates enforcement state</td><td>A read-only client and a state-mutating client are indistinguishable at the transport layer; least-privilege can't be expressed</td></tr>
+<tr><td><strong>Trust assumption</strong></td><td>"May observe security events"</td><td>"May change what is enforced"</td><td>Identical trust is required to reach either — there is no way to grant one without the other</td></tr>
+<tr><td><strong>Traffic pattern</strong></td><td>Few long-lived streams, continuous push</td><td>Many short-lived unary calls, bursty on policy change</td><td>Both share the same keepalive (<code>kaep</code>/<code>kasp</code>) and connection settings tuned for neither case specifically</td></tr>
+<tr><td><strong>Workload shape</strong></td><td>I/O-bound fan-out to N subscribers</td><td>CPU/lock-bound: policy parsing, enforcer syscalls</td><td>A slow <code>WatchAlerts</code> consumer occupies goroutines/buffers that management RPCs indirectly compete for on the same server's accept loop</td></tr>
+<tr><td><strong>Latency requirement</strong></td><td>Throughput-sensitive (don't drop events)</td><td>Correctness-sensitive (policy must land before the workload runs)</td><td>No independent queue sizing or scheduling priority between the two exists today</td></tr>
+<tr><td><strong>Availability requirement</strong></td><td>Nice to lose a few seconds of stream during restart</td><td>Must always be reachable to push an emergency policy</td><td>One <code>Serve()</code> failure (<code>ServeLogFeeds</code>) takes down policy delivery too, since it's the same listener/server object</td></tr>
+<tr><td><strong>Scaling characteristic</strong></td><td>Scales with event volume × downstream consumers</td><td>Scales with number of administrators/controllers, ~O(1) per node</td><td>Cannot size the log path without also touching the code path that serves policy pushes</td></tr>
+<tr><td><strong>Client lifecycle</strong></td><td>Long-lived, reconnect-and-resume semantics</td><td>Short-lived, transactional, request/response</td><td>Reflection (<code>reflection.Register(dm.Logger.LogServer)</code>) exposes both surfaces to any client that can reach the port at all</td></tr>
+<tr><td><strong>Operational ownership</strong></td><td>Observability/SIEM teams, log infra, SREs</td><td>Security/platform teams enforcing policy</td><td>Both teams must coordinate on the same certificate, port, firewall rule, and on-call rotation</td></tr>
+<tr><td><strong>Failure domain</strong></td><td>Log storm / stuck subscriber / SIEM outage backpressures the stream</td><td>Malformed policy blob / slow enforcer syscall blocks a unary RPC</td><td>A failure/backpressure event in one is not isolated from the other's goroutine pool and listener socket</td></tr>
+<tr><td><strong>Resource utilization</strong></td><td>High: per-stream buffers × N streams, high-cardinality marshaling</td><td>Low: single small policy blob per call</td><td>Cannot grow the log path's memory/goroutine budget without over-provisioning the rarely-used management path identically, or vice versa</td></tr>
+</tbody>
+</table>
+
+<p><strong>Why this matters beyond security.</strong> It would be easy to reduce this to "the ports should be different for security reasons," but the deeper issue is that <strong>KubeArmor is currently unable to reason about, size, or operate these two planes independently</strong>, because the code has only one seam — <code>dm.Logger.LogServer</code> — through which every gRPC concern (TLS, keepalive, health, reflection, service registration) flows. Concretely, today:</p>
+
+<ul>
+  <li><code>fd.LogServer = grpc.NewServer(grpc.Creds(tlsCredentials), grpc.KeepaliveEnforcementPolicy(kaep), grpc.KeepaliveParams(kasp))</code> in <code>feeder.go</code> is constructed <strong>once</strong>, and <code>PolicyService</code>/<code>ProbeService</code>/<code>StateAgent</code> are registered onto that same object later in <code>kubeArmor.go</code> (<code>pb.RegisterPolicyServiceServer(dm.Logger.LogServer, policyService)</code>, etc.).</li>
+  <li>TLS is all-or-nothing (<code>cfg.GlobalCfg.TLSEnabled</code>): you cannot require mTLS for policy pushes while leaving log streaming on a simpler trust model, or vice versa, without a second listener.</li>
+  <li><code>reflection.Register(dm.Logger.LogServer)</code> advertises every service — telemetry and control alike — to anything that can complete a TCP handshake with the port.</li>
+  <li>There is exactly one <code>net.Listener</code> (<code>fd.Listener</code>, bound to <code>cfg.GlobalCfg.GRPC</code>), so there is no way to bind management to <code>localhost</code>/a Unix Domain Socket while still exposing observability externally (or the reverse) without a structural change.</li>
+  <li>Health status is tracked per-service (<code>dm.SetHealthStatus(pb.PolicyService_ServiceDesc.ServiceName, ...)</code>) but is served by the same health endpoint as the log service, so a health probe cannot cheaply express "is management up" independently of "is the log pipe up."</li>
+</ul>
+
+<p>These two logical planes are coupled purely because they happen to share a transport object that was originally created to serve logs — <code>PolicyService</code>/<code>ProbeService</code>/<code>StateAgent</code> were bolted onto it later (<code>pb.RegisterPolicyServiceServer(dm.Logger.LogServer, ...)</code>) as a convenience, not as a deliberate design decision.</p>
+
+<hr class="sep">
+
+<!-- ================= PART 3 ================= -->
+<h2 class="part3">Part 3 — Proposed Architecture</h2>
+
+<h3>3.1 Current State</h3>
+
+<div class="diagram">
+  <img src="pdf_assets/diagram1_current.svg" alt="Current architecture: single grpc.Server multiplexing LogService, PolicyService, ProbeService and StateAgent">
+</div>
+<p class="diagram-caption">Figure 1 — Today: one grpc.Server, one listener, one certificate, four unrelated services.</p>
+
+<p>Every consumer — regardless of trust level, traffic shape, or purpose — terminates on the same socket, the same certificate, and the same <code>grpc.Server</code> scheduling domain.</p>
+
+<h3 class="mgmt-h">3.2 Proposed State</h3>
+
+<div class="diagram">
+  <img src="pdf_assets/diagram2_proposed.svg" alt="Proposed architecture: separate Observability Server and Management Server with independent listeners">
+</div>
+<p class="diagram-caption">Figure 2 — Proposed: two independent grpc.Server instances, two listeners, two trust domains.</p>
+
+<h3>3.3 What changes structurally</h3>
+<ul>
+  <li><strong>Separate listeners.</strong> Two <code>net.Listener</code>s replace <code>fd.Listener</code>: one for observability (kept on the existing configurable TCP port for backward compatibility), one for management (defaulting to a Unix Domain Socket under <code>/var/run/kubearmor/</code>, with an optional <code>localhost</code>-bound TCP fallback for environments without UDS support).</li>
+  <li><strong>Separate <code>grpc.Server</code> instances.</strong> <code>fd.LogServer</code> becomes <code>fd.ObservabilityServer</code>; a new <code>dm.ManagementServer</code> is constructed independently, each with its own <code>grpc.ServerOption</code> set.</li>
+  <li><strong>Separate TLS configuration.</strong> <code>loadTLSCredentials</code> is parameterized per-server: the observability server keeps the existing relay-facing certificate chain, while the management server can use a distinct, more tightly scoped certificate/trust bundle.</li>
+  <li><strong>Separate interceptors/middleware.</strong> Each server gets its own interceptor stack — rate limiting and audit logging on the management server, payload-size/backpressure tuning on the observability server.</li>
+  <li><strong>Separate certificates and trust domains.</strong> The management server's certificate can be scoped to a distinct SPIFFE-like trust domain/CA intended only for administrative clients.</li>
+  <li><strong>Independent lifecycle.</strong> <code>ObservabilityServer.GracefulStop()</code> and <code>ManagementServer.GracefulStop()</code> can be sequenced independently during shutdown/reload.</li>
+  <li><strong>Independent deployment options.</strong> An operator can expose only the observability port through a Kubernetes <code>Service</code>/<code>NetworkPolicy</code> while leaving the management port reachable only via a sidecar or Unix socket mount.</li>
+  <li><strong>Transport flexibility.</strong> The management server is a natural fit for a Unix Domain Socket (as Falco, Cilium/Hubble, and SPIRE already do), while the observability server remains TCP+TLS since its clients (Relay, SIEM) are typically remote.</li>
+</ul>
+
+<h3>3.4 Sequence Diagrams</h3>
+
+<p><strong>Today: policy push and log streaming interleave on one server</strong></p>
+<div class="diagram">
+  <img src="pdf_assets/diagram3_seq_current.svg" alt="Sequence diagram showing policy push delayed behind a log storm on the shared server">
+</div>
+<p class="diagram-caption">Figure 3 — A log storm on the shared server delays the response to a concurrent policy push.</p>
+
+<p><strong>Proposed: independent scheduling per plane</strong></p>
+<div class="diagram">
+  <img src="pdf_assets/diagram4_seq_proposed.svg" alt="Sequence diagram showing the policy push responding immediately on an independent management server">
+</div>
+<p class="diagram-caption">Figure 4 — With independent servers, the management response is unaffected by observability load.</p>
+
+<hr class="sep">
+
+<!-- ================= PART 4 ================= -->
+<h2 class="part4">Part 4 — Architecture Benefits</h2>
+
+<h3>Security</h3>
+<ul>
+  <li><strong>Principle of least privilege.</strong> A component that only needs to read logs never needs — and therefore never holds — credentials capable of pushing policy.</li>
+  <li><strong>Trust domain separation.</strong> Observability and management can be issued certificates from different intermediate CAs / SPIFFE trust domains.</li>
+  <li><strong>Certificate separation</strong> limits the blast radius of a leaked key: a leaked observability certificate lets an attacker read logs; it should never let them push a policy.</li>
+  <li><strong>Independent authentication.</strong> The management server can require mTLS or a bearer token unconditionally, even if the observability server allows a lighter-weight authentication mode.</li>
+  <li><strong>Future authorization.</strong> A per-RPC authorization interceptor is far easier to reason about when the interceptor chain is scoped to management RPCs only.</li>
+  <li><strong>RBAC friendliness.</strong> Kubernetes <code>NetworkPolicy</code>/<code>AuthorizationPolicy</code> controls map naturally onto "port A is observability, port B is management."</li>
+  <li><strong>Easier audit.</strong> Audit logging of "who changed policy" is a clean, low-volume log stream when isolated from telemetry.</li>
+</ul>
+
+<h3 class="mgmt-h">Performance</h3>
+<ul>
+  <li><strong>Independent thread pools / goroutine scheduling</strong> — a log fan-out storm no longer contends with the goroutines handling a <code>containerPolicy</code> unary call.</li>
+  <li><strong>No starvation between telemetry and control</strong> — the direct fix for the sequence-diagram scenario in §3.4.</li>
+  <li><strong>Independent queue sizing.</strong> The observability server's per-client buffers can be tuned for throughput without affecting the management server's footprint.</li>
+  <li><strong>Independent backpressure.</strong> A slow observability consumer can be throttled or disconnected without risk to the management path.</li>
+  <li><strong>Separate resource allocation</strong> — cgroup/goroutine budget planning per plane.</li>
+  <li><strong>Better latency for policy operations</strong>, no longer queued behind the observability server's scheduler.</li>
+</ul>
+
+<h3 class="industry-h">Scalability</h3>
+<ul>
+  <li><strong>Independent scaling</strong> — a per-node agent plus a separate management sidecar can scale on entirely different axes.</li>
+  <li><strong>High-volume log streaming vs. low-volume management RPCs</strong> no longer forced through identical connection/keepalive tuning.</li>
+  <li><strong>Better horizontal scaling</strong> of downstream consumers: Relay replicas scale with event volume, decoupled from operator activity.</li>
+</ul>
+
+<h3>Reliability</h3>
+<ul>
+  <li><strong>Log storms cannot delay policy updates</strong> (and, symmetrically, policy churn cannot delay alert delivery).</li>
+  <li><strong>Telemetry failures cannot impact management</strong> — a <code>LogService</code> panic/restart no longer needs to restart <code>PolicyService</code>.</li>
+  <li><strong>Management overload cannot impact telemetry</strong> — a slow enforcer syscall does not block the accept loop serving <code>WatchAlerts</code>.</li>
+  <li><strong>Better fault isolation and failure domains</strong>, each independently observable and restartable.</li>
+</ul>
+
+<h3 class="mgmt-h">Networking</h3>
+<ul>
+  <li><strong>Bind management only to <code>localhost</code> or a Unix Domain Socket</strong>, drastically shrinking the network-reachable attack surface for policy mutation.</li>
+  <li><strong>Independent ports</strong> — no more overloading one port with reflection exposing both surfaces.</li>
+  <li><strong>Different load balancers</strong> — observability behind a streaming-aware LB; management avoids a shared LB entirely.</li>
+  <li><strong>Different keepalive settings</strong> tuned for very different connection-duration profiles.</li>
+  <li><strong>Different connection limits</strong>, so short management bursts can't exhaust a listener backlog sized for long-lived streams.</li>
+</ul>
+
+<h3>Rate Limiting</h3>
+<ul>
+  <li><strong>Independent rate limits and quotas</strong> — aggressive per-IP limits on management RPCs without penalizing legitimate log streaming.</li>
+  <li><strong>Separate DoS protection postures</strong> for a more broadly-reachable observability endpoint vs. a tightly allowlisted management endpoint.</li>
+</ul>
+
+<h3 class="industry-h">gRPC Features</h3>
+<ul>
+  <li><strong>Independent interceptors and middleware</strong> scoped correctly to each plane.</li>
+  <li><strong>Independent tracing/metrics/logging</strong> — trace sampling for a high-rate log stream should differ from tracing for occasional policy pushes.</li>
+  <li><strong>Independent reflection configuration</strong> — safely enabled for observability, disabled/authenticated for management.</li>
+</ul>
+
+<h3>Operations</h3>
+<ul>
+  <li><strong>Easier maintenance</strong> — each server reasoned about, load-tested, and documented independently.</li>
+  <li><strong>Easier debugging</strong> — a <code>karmor probe</code> hang is diagnosed entirely within the management server's logs/metrics.</li>
+  <li><strong>Easier upgrades</strong> — a protocol change to <code>LogService</code> carries zero risk to <code>PolicyService</code> wire compatibility.</li>
+  <li><strong>Easier testing</strong> — tests can spin up just the server relevant to the code path under test.</li>
+</ul>
+
+<h3 class="mgmt-h">Future Extensibility</h3>
+<ul>
+  <li><strong>Future management authentication</strong> (SPIFFE/mTLS, OIDC-derived identity) introduced on the management server alone.</li>
+  <li><strong>Authorization interceptors</strong> (e.g., OPA/Rego-based policy-push authorization) on a small, well-understood RPC surface.</li>
+  <li><strong>Admission-style policies</strong> — "reject this policy push unless signed by X" — become tractable as management-server interceptors.</li>
+  <li><strong>Multi-tenant control plane</strong> — a centralized policy-management service could speak only to the management server across a fleet.</li>
+  <li><strong>External management APIs</strong> — a REST/gRPC-gateway façade over just the management services becomes a contained, auditable surface.</li>
+</ul>
+
+<h3>Additional benefits discovered during analysis</h3>
+<ul>
+  <li><strong>Cleaner capacity planning.</strong> A 1-second keepalive is far more appropriate for a long-lived streaming client than for a connect-once policy-push client; splitting lets each keepalive policy fit its traffic.</li>
+  <li><strong>Cleaner health semantics.</strong> Splitting makes "management is degraded but observability is healthy" a first-class, independently-probable signal for Kubernetes liveness/readiness.</li>
+  <li><strong>Reduced blast radius for reflection-based enumeration attacks.</strong> Splitting removes management service definitions from the observability-reachable surface entirely.</li>
+</ul>
+
+<hr class="sep">
+
+<!-- ================= PART 5 ================= -->
+<h2 class="part5">Part 5 — Industry Research: How Cloud-Native Systems Separate These Planes</h2>
+
+<h3 class="industry-h">Kubernetes — kubelet's read-only vs. secure port</h3>
+<p>Kubernetes historically shipped the kubelet with <strong>two separate ports</strong> for conceptually similar telemetry-vs-management data: <code>:10255</code>, an unauthenticated <strong>read-only</strong> port serving node/pod status and metrics, and <code>:10250</code>, an authenticated, authorized <strong>secure</strong> port serving the same and mutating operations. The read-only port was deliberately deprecated and disabled by default because an unauthenticated port — even one "just for reading" — became an unacceptable attack surface once the ecosystem matured. This is a direct precedent: read-mostly and authenticated/mutating concerns should not default to sharing a transport.</p>
+<p>Reference: <a href="https://kubernetes.io/docs/reference/access-authn-authz/kubelet-authn-authz/">Kubelet authentication/authorization</a>; <a href="https://cloud.google.com/kubernetes-engine/docs/how-to/disable-kubelet-readonly-port">Disable the kubelet read-only port (GKE)</a>.</p>
+
+<h3 class="industry-h">etcd — client port vs. peer port</h3>
+<p>etcd has shipped with <strong>separate listeners</strong> since its earliest versions: <code>--listen-client-urls</code> (default <code>2379</code>) for application/client gRPC traffic, and <code>--listen-peer-urls</code> (default <code>2380</code>) for Raft consensus traffic between cluster members. Notably, etcd's peer port <em>accidentally</em> accepted client-style traffic for years, and the community treated this as a bug: <a href="https://github.com/etcd-io/etcd/pull/13565">PR #13565</a> explicitly removed the gRPC server from the peer listener, calling the leftover path "misleading" and something that "promotes bad usage patterns."</p>
+<p>Reference: <a href="https://etcd.io/docs/v3.4/op-guide/configuration/">etcd configuration options</a>; <a href="https://github.com/etcd-io/etcd/pull/13565">etcd-io/etcd#13565</a>.</p>
+
+<h3 class="industry-h">Istio — Envoy data plane vs. Istiod control plane</h3>
+<p>Istio is the canonical service-mesh example: the <strong>data plane</strong> (Envoy sidecars) carries and observes all application traffic, while the <strong>control plane</strong> (Istiod) handles configuration translation, service discovery, and certificate issuance. Istio's own security model documentation calls Istiod "a highly privileged component, similar to that of the Kubernetes API server itself," and treats its compromise as categorically more severe than a sidecar compromise.</p>
+<p>Reference: <a href="https://istio.io/latest/docs/ops/deployment/architecture/">Istio Architecture</a>; <a href="https://istio.io/latest/docs/ops/deployment/security-model/">Istio Security Model</a>; <a href="https://tetrate.io/blog/istio-component-ports-and-functions-in-detail">Istio component ports in detail</a>.</p>
+
+<h3 class="industry-h">Cilium / Hubble — the closest structural analogue to KubeArmor</h3>
+<p>Hubble's server is <strong>embedded directly inside the <code>cilium-agent</code> process</strong> (exactly as <code>LogService</code> is embedded inside the KubeArmor daemon) and exposes its Observer gRPC service <strong>locally via a Unix Domain Socket, optionally also via TCP</strong>. A separate, standalone <strong>Hubble Relay</strong> connects to every node's embedded Hubble server and re-serves a cluster-wide aggregated view — mapping almost one-to-one onto KubeArmor's own node-local <code>LogService</code> + external <strong>KubeArmor-Relay</strong> pattern.</p>
+<p>Reference: <a href="https://docs.cilium.io/en/stable/internals/hubble/">Hubble internals</a>; <a href="https://docs.cilium.io/en/stable/overview/component-overview/">Cilium Component Overview</a>.</p>
+
+<h3 class="industry-h">SPIRE — Workload API (UDS) vs. Server API (mTLS/TCP)</h3>
+<p>SPIRE agents expose the <strong>Workload API</strong> exclusively over a <strong>Unix Domain Socket</strong>, authenticating callers via kernel peer credentials (<code>SO_PEERCRED</code>) rather than network-level TLS, because that API is deliberately scoped to local, same-host callers. The Agent-to-Server control channel, by contrast, runs over authenticated TCP with mTLS-derived trust, because it spans hosts.</p>
+<p>Reference: <a href="https://spiffe.io/docs/latest/deploying/spire_agent/">SPIRE Agent Configuration Reference</a>; <a href="https://spiffe.io/docs/latest/spiffe-specs/spiffe_workload_endpoint/">SPIFFE Workload Endpoint spec</a>.</p>
+
+<h3 class="industry-h">Falco — the industry moving away from a single embedded gRPC server</h3>
+<p>Falco previously shipped exactly the shape KubeArmor has today: one embedded gRPC server exposing an "outputs" streaming API over a Unix socket or a TLS-secured TCP socket. As of Falco <code>0.43.0</code>, the project <strong>deprecated its embedded gRPC output server entirely</strong>, directing users toward decoupled, purpose-built output distribution (Falcosidekick) instead of a single server multiplexing everything.</p>
+<p>Reference: <a href="https://falco.org/docs/developer-guide/grpc/outputs/">Falco gRPC Outputs docs (deprecation notice)</a>; <a href="https://github.com/falcosecurity/client-go">falcosecurity/client-go</a>.</p>
+
+<h3 class="industry-h">HashiCorp Vault — multiple listener stanzas by design</h3>
+<p>Vault's configuration model treats "how many listeners, with what TLS and what purpose" as a first-class, repeatable configuration stanza, explicitly supporting per-listener TLS settings and even per-listener response redaction for unauthenticated endpoints. Vault separates the client-facing API address from the intra-cluster address, each with independent listener configuration.</p>
+<p>Reference: <a href="https://developer.hashicorp.com/vault/docs/configuration/listener/tcp">Vault TCP listener configuration</a>; <a href="https://developer.hashicorp.com/vault/docs/configuration">Vault configuration parameters</a>.</p>
+
+<h3>Synthesis</h3>
+<p>Across every system studied, the same shape recurs: <strong>a high-volume, often-embedded, read/telemetry-oriented surface</strong> is architecturally and operationally separated from <strong>a low-volume, high-trust, mutation-oriented surface</strong> — via independent listeners/ports/sockets, independent TLS material, and often independent processes altogether. None of the mature projects surveyed serve both concerns from one server as a long-term design; where that pattern existed historically (etcd's peer port, Falco's embedded gRPC server), it was treated as technical debt and removed.</p>
+
+<hr class="sep">
+
+<!-- ================= PART 6 ================= -->
+<h2 class="part6">Part 6 — Research at Scale</h2>
+
+<p><strong>Large Kubernetes clusters / thousands of nodes.</strong> At fleet scale, the observability plane's aggregate load (N nodes × event rate) dwarfs the management plane's (N nodes × occasional policy push). A split model lets fleet operators tune Relay-facing listener backlogs, buffer sizes, and connection limits purely as a function of telemetry volume, while the management listener remains minimally provisioned on every node — mirroring why Cilium ships Hubble embedded-but-locally-scoped with a dedicated Relay tier.</p>
+
+<p><strong>Standalone mode / edge deployments.</strong> KubeArmor's management plane is frequently operated by a human at the console or a local provisioning script — the co-located-caller pattern that SPIRE's Workload API and Falco's Unix-socket transport are optimized for. Binding management to a Unix Domain Socket by default removes the need for a management-plane TLS certificate at all on single-node edge deployments.</p>
+
+<p><strong>Multi-cluster deployments.</strong> A central policy-management or GitOps controller reconciling desired state across many clusters should only ever need to reach each node's management endpoint — never its (potentially far higher-volume) log endpoint.</p>
+
+<p><strong>Air-gapped deployments.</strong> Air-gapped environments frequently need to guarantee that no runtime security telemetry leaves the enclave except through an audited egress path, while still allowing local administrative tooling to manage policy freely inside the enclave. Two servers make this a natural default rather than an all-or-nothing network policy.</p>
+
+<p><strong>High-volume telemetry environments / enterprise SIEM integrations / SOCs.</strong> SOC-facing SIEM pipelines want a stable, high-throughput, purely additive feed and typically operate under a different change-management process than the team owning security policy. Splitting the transport gives SOC/SIEM engineering teams an interface they can consume, rate-limit, and monitor independently, without any risk to policy delivery latency.</p>
+
+<hr class="sep">
+
+<!-- ================= COMPARISON TABLE ================= -->
+<h2 class="plain">Data Plane vs. Control Plane — Summary Comparison</h2>
+
+<table>
+<thead>
+<tr><th>Property</th><th><span class="tag obs">Observability</span> LogService</th><th><span class="tag mgmt">Management</span> Policy / Probe / State</th></tr>
+</thead>
+<tbody>
+<tr><td>RPC style</td><td>Server-streaming, long-lived</td><td>Unary (mostly), short-lived</td></tr>
+<tr><td>Direction</td><td>Daemon → client (push)</td><td>Client → daemon (command), occasional daemon → client stream (<code>WatchState</code>)</td></tr>
+<tr><td>Mutates enforcement state?</td><td>No</td><td>Yes (<code>PolicyService</code>), or reflects state (<code>StateAgent</code>, <code>ProbeService</code>)</td></tr>
+<tr><td>Volume</td><td>High, bursty, adversary-correlated</td><td>Low, steady</td></tr>
+<tr><td>Latency sensitivity</td><td>Throughput-sensitive</td><td>Correctness/urgency-sensitive</td></tr>
+<tr><td>Ideal transport</td><td>TCP + TLS (remote fan-out)</td><td>Unix Domain Socket / localhost (local-first)</td></tr>
+<tr><td>Ideal trust model</td><td>Read-only credential class</td><td>Mutating/admin credential class, mTLS-ready</td></tr>
+<tr><td>Primary consumers</td><td>Relay, <code>karmor logs</code>, SIEM</td><td><code>karmor policy</code>/<code>probe</code>, operator/controller</td></tr>
+<tr><td>Failure impact</td><td>Delayed/lost telemetry</td><td>Delayed/failed enforcement change</td></tr>
+<tr><td>Scaling axis</td><td>Event volume × subscriber count</td><td>Number of administrative actors (~O(1))</td></tr>
+<tr><td>Analogous industry component</td><td>Envoy data plane, Hubble server, etcd client port</td><td>Istiod, SPIRE Server API, etcd peer port</td></tr>
+</tbody>
+</table>
+
+<hr class="sep">
+
+<!-- ================= FUTURE EXTENSIONS ================= -->
+<h2 class="part4">Future Extensions</h2>
+<ol>
+  <li><strong>Authentication/authorization interceptors on the management server</strong> — SPIFFE/mTLS-derived identity, or a simple static-token model as an interim step.</li>
+  <li><strong>Per-RPC audit logging</strong> on the management server, independent of telemetry volume.</li>
+  <li><strong>Unix Domain Socket as the default management transport</strong> on Linux, with TCP+TLS retained as an opt-in for remote management.</li>
+  <li><strong>Rate limiting and quota interceptors</strong>, tuned per plane.</li>
+  <li><strong>Independent health/readiness endpoints</strong> so Kubernetes probes can distinguish "telemetry degraded" from "management degraded."</li>
+  <li><strong>A future gRPC-gateway/REST façade over the management server only.</strong></li>
+  <li><strong>Multi-tenant / centralized control plane</strong> speaking only to the management server across a fleet.</li>
+</ol>
+
+<hr class="sep">
+
+<!-- ================= CONCLUSION ================= -->
+<h2 class="plain">Conclusion</h2>
+<p>KubeArmor's <code>LogService</code>, <code>PolicyService</code>, <code>ProbeService</code>, and <code>StateAgent</code> are bound together today by an implementation detail — they all happen to be registered on <code>dm.Logger.LogServer</code> — not by any architectural necessity. They differ in traffic shape, trust requirements, latency sensitivity, failure domains, and operational ownership across every axis examined in this proposal. Splitting them into an <strong>Observability Server</strong> and a <strong>Management Server</strong> is consistent with how mature cloud-native systems — Kubernetes, etcd, Istio, Cilium/Hubble, SPIRE, Falco, and Vault — have independently converged on the same separation, and in at least two documented cases (etcd's peer port, Falco's embedded gRPC server), systems that once shared a transport for both concerns later treated that sharing as technical debt to be removed. This is a structural, incremental change: it does not require redesigning any RPC's semantics, only the transport and lifecycle plumbing that currently forces two fundamentally different planes through one seam.</p>
+
+<hr class="sep">
+
+<!-- ================= REFERENCES ================= -->
+<h2 class="plain">References</h2>
+<ul class="refs">
+  <li>KubeArmor source: <code>KubeArmor/KubeArmor/feeder/feeder.go</code>, <code>KubeArmor/KubeArmor/feeder/logServer.go</code>, <code>KubeArmor/KubeArmor/core/kubeArmor.go</code>, <code>KubeArmor/KubeArmor/core/karmorprobedata.go</code>, <code>KubeArmor/protobuf/kubearmor.proto</code>, <code>KubeArmor/protobuf/policy.proto</code>, <code>KubeArmor/protobuf/state.proto</code>, <code>KubeArmor/pkg/KubeArmorOperator/common/defaults.go</code>.</li>
+  <li>Kubernetes: <a href="https://kubernetes.io/docs/reference/access-authn-authz/kubelet-authn-authz/">Kubelet authentication/authorization</a>, <a href="https://cloud.google.com/kubernetes-engine/docs/how-to/disable-kubelet-readonly-port">Disable the kubelet read-only port</a>, <a href="https://github.com/kubernetes/kubernetes/pull/64187">kubeadm PR #64187</a>.</li>
+  <li>etcd: <a href="https://etcd.io/docs/v3.4/op-guide/configuration/">Configuration options</a>, <a href="https://github.com/etcd-io/etcd/pull/13565">etcd-io/etcd PR #13565</a>, <a href="https://github.com/etcd-io/etcd/issues/11509">etcd-io/etcd issue #11509</a>.</li>
+  <li>Istio: <a href="https://istio.io/latest/docs/ops/deployment/architecture/">Architecture</a>, <a href="https://istio.io/latest/docs/ops/deployment/security-model/">Security Model</a>, <a href="https://tetrate.io/blog/istio-component-ports-and-functions-in-detail">Component ports in detail</a>, <a href="https://github.com/istio/istio/blob/master/architecture/networking/pilot.md">Pilot/Istiod architecture</a>.</li>
+  <li>Cilium/Hubble: <a href="https://docs.cilium.io/en/stable/internals/hubble/">Hubble internals</a>, <a href="https://docs.cilium.io/en/stable/overview/component-overview/">Cilium Component Overview</a>.</li>
+  <li>SPIRE: <a href="https://spiffe.io/docs/latest/deploying/spire_agent/">SPIRE Agent Configuration Reference</a>, <a href="https://spiffe.io/docs/latest/spiffe-specs/spiffe_workload_endpoint/">SPIFFE Workload Endpoint</a>.</li>
+  <li>Falco: <a href="https://falco.org/docs/developer-guide/grpc/outputs/">gRPC Outputs (deprecation)</a>, <a href="https://github.com/falcosecurity/falco/pull/1217">Unix socket for the gRPC server (PR #1217)</a>, <a href="https://github.com/falcosecurity/client-go">falcosecurity/client-go</a>.</li>
+  <li>HashiCorp Vault: <a href="https://developer.hashicorp.com/vault/docs/configuration/listener/tcp">TCP listener configuration</a>, <a href="https://developer.hashicorp.com/vault/docs/configuration">Configuration parameters</a>.</li>
+</ul>
+
+<div class="footer-note">KubeArmor Architecture Proposal — Observability Plane / Management Plane Separation &nbsp;•&nbsp; Draft for maintainer review &nbsp;•&nbsp; Prepared by Contributor Sagar Khandagre</div>
+
+</div>
+</body>
+</html>
